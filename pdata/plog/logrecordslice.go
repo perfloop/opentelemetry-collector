@@ -7,7 +7,7 @@ package plog
 func (es LogRecordSlice) MoveFirstNTo(n int, dest LogRecordSlice) {
 	es.state.AssertMutable()
 	dest.state.AssertMutable()
-	if n == 0 || es.orig == dest.orig {
+	if es.orig == dest.orig {
 		return
 	}
 	moved := (*es.orig)[:n]
