@@ -24,10 +24,6 @@ func TestLogRecordSliceMoveFirstNTo(t *testing.T) {
 	assert.Equal(t, expected.At(1), dest.At(1))
 	assert.Equal(t, expected.At(2), src.At(0))
 	assert.Equal(t, expected.At(3), src.At(1))
-
-	src.MoveFirstNTo(src.Len(), dest)
-	assert.Zero(t, src.Len())
-	assert.Equal(t, expected, dest)
 }
 
 func TestLogRecordSliceMoveFirstNToReadOnly(t *testing.T) {

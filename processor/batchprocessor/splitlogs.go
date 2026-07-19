@@ -66,23 +66,7 @@ func splitLogs(size int, src plog.Logs) plog.Logs {
 	return dest
 }
 
-func splitOneResourceOneScopeLogs(size int, src plog.Logs) (plog.Logs, bool) {
-	srcResourceLogs := src.ResourceLogs()
-	if srcResourceLogs.Len() != 1 {
-		return plog.Logs{}, false
-	}
-
-	srcResourceLog := srcResourceLogs.At(0)
-	srcScopeLogs := srcResourceLog.ScopeLogs()
-	if srcScopeLogs.Len() != 1 {
-		return plog.Logs{}, false
-	}
-
-	srcScopeLog := srcScopeLogs.At(0)
-	if srcScopeLog.LogRecords().Len() <= size {
-		return plog.Logs{}, false
-	}
-
+func splitOneResourceOneScopeLogs(size int, srcResourceLog plog.ResourceLogs, srcScopeLog plog.ScopeLogs) plog.Logs {
 	dest := plog.NewLogs()
 	destResourceLog := dest.ResourceLogs().AppendEmpty()
 	srcResourceLog.Resource().CopyTo(destResourceLog.Resource())
@@ -92,7 +76,7 @@ func splitOneResourceOneScopeLogs(size int, src plog.Logs) (plog.Logs, bool) {
 	destScopeLog.SetSchemaUrl(srcScopeLog.SchemaUrl())
 	srcScopeLog.LogRecords().MoveFirstNTo(size, destScopeLog.LogRecords())
 
-	return dest, true
+	return dest
 }
 
 // resourceLRC calculates the total number of log records in the plog.ResourceLogs.

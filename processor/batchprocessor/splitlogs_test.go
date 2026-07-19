@@ -40,9 +40,8 @@ func TestSplitLogs(t *testing.T) {
 			scopeLogs.LogRecords().At(index).SetSeverityText(getTestLogSeverityText(0, index))
 		}
 
-		split, ok := splitOneResourceOneScopeLogs(2, fastPathLogs)
+		split := splitOneResourceOneScopeLogs(2, resourceLogs, scopeLogs)
 
-		assert.True(t, ok)
 		assert.Equal(t, 2, split.LogRecordCount())
 		assert.Equal(t, 1, fastPathLogs.LogRecordCount())
 		assert.Equal(t, resourceSchemaURL, split.ResourceLogs().At(0).SchemaUrl())

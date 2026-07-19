@@ -10,11 +10,6 @@ func (es LogRecordSlice) MoveFirstNTo(n int, dest LogRecordSlice) {
 	if n == 0 || es.orig == dest.orig {
 		return
 	}
-	if n == es.Len() {
-		es.MoveAndAppendTo(dest)
-		return
-	}
-
 	moved := (*es.orig)[:n]
 	*dest.orig = append(*dest.orig, moved...)
 	clear(moved)
