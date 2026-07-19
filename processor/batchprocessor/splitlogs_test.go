@@ -27,6 +27,31 @@ func TestSplitLogs_noop(t *testing.T) {
 }
 
 func TestSplitLogs(t *testing.T) {
+	t.Run("one resource one scope fast path", func(t *testing.T) {
+		const resourceSchemaURL = "https://example.com/resource"
+		const scopeSchemaURL = "https://example.com/scope"
+
+		fastPathLogs := testdata.GenerateLogs(3)
+		resourceLogs := fastPathLogs.ResourceLogs().At(0)
+		resourceLogs.SetSchemaUrl(resourceSchemaURL)
+		scopeLogs := resourceLogs.ScopeLogs().At(0)
+		scopeLogs.SetSchemaUrl(scopeSchemaURL)
+		for index := 0; index < scopeLogs.LogRecords().Len(); index++ {
+			scopeLogs.LogRecords().At(index).SetSeverityText(getTestLogSeverityText(0, index))
+		}
+
+		split, ok := splitOneResourceOneScopeLogs(2, fastPathLogs)
+
+		assert.True(t, ok)
+		assert.Equal(t, 2, split.LogRecordCount())
+		assert.Equal(t, 1, fastPathLogs.LogRecordCount())
+		assert.Equal(t, resourceSchemaURL, split.ResourceLogs().At(0).SchemaUrl())
+		assert.Equal(t, scopeSchemaURL, split.ResourceLogs().At(0).ScopeLogs().At(0).SchemaUrl())
+		assert.Equal(t, "test-log-int-0-0", split.ResourceLogs().At(0).ScopeLogs().At(0).LogRecords().At(0).SeverityText())
+		assert.Equal(t, "test-log-int-0-1", split.ResourceLogs().At(0).ScopeLogs().At(0).LogRecords().At(1).SeverityText())
+		assert.Equal(t, "test-log-int-0-2", fastPathLogs.ResourceLogs().At(0).ScopeLogs().At(0).LogRecords().At(0).SeverityText())
+	})
+
 	ld := testdata.GenerateLogs(20)
 	logs := ld.ResourceLogs().At(0).ScopeLogs().At(0).LogRecords()
 	for i := 0; i < logs.Len(); i++ {

@@ -12,84 +12,87 @@ func splitLogs(size int, src plog.Logs) plog.Logs {
 	if src.LogRecordCount() <= size {
 		return src
 	}
-	return splitLogsWithKnownSize(size, src)
-}
-
-func splitLogsWithKnownSize(size int, src plog.Logs) plog.Logs {
-	remaining := size
+	totalCopiedLogRecords := 0
 	dest := plog.NewLogs()
 
-	for remaining > 0 {
-		srcResourceLogs := src.ResourceLogs()
-		srcResourceLog := srcResourceLogs.At(0)
-		resourceLogCount := resourceLRC(srcResourceLog)
-		if resourceLogCount <= remaining {
-			remaining -= resourceLogCount
-			moveFirstResourceLogs(srcResourceLogs, dest.ResourceLogs())
-			continue
+	src.ResourceLogs().RemoveIf(func(srcRl plog.ResourceLogs) bool {
+		// If we are done skip everything else.
+		if totalCopiedLogRecords == size {
+			return false
 		}
 
-		destResourceLog := dest.ResourceLogs().AppendEmpty()
-		srcResourceLog.Resource().CopyTo(destResourceLog.Resource())
-		destResourceLog.SetSchemaUrl(srcResourceLog.SchemaUrl())
-		srcScopeLogs := srcResourceLog.ScopeLogs()
-		for remaining > 0 {
-			srcScopeLog := srcScopeLogs.At(0)
-			logRecords := srcScopeLog.LogRecords()
-			if logRecords.Len() <= remaining {
-				remaining -= logRecords.Len()
-				moveFirstScopeLogs(srcScopeLogs, destResourceLog.ScopeLogs())
-				continue
+		// If it fully fits
+		srcRlLRC := resourceLRC(srcRl)
+		if (totalCopiedLogRecords + srcRlLRC) <= size {
+			totalCopiedLogRecords += srcRlLRC
+			srcRl.MoveTo(dest.ResourceLogs().AppendEmpty())
+			return true
+		}
+
+		destRl := dest.ResourceLogs().AppendEmpty()
+		srcRl.Resource().CopyTo(destRl.Resource())
+		destRl.SetSchemaUrl(srcRl.SchemaUrl())
+		srcRl.ScopeLogs().RemoveIf(func(srcIll plog.ScopeLogs) bool {
+			// If we are done skip everything else.
+			if totalCopiedLogRecords == size {
+				return false
 			}
 
-			destScopeLog := destResourceLog.ScopeLogs().AppendEmpty()
-			srcScopeLog.Scope().CopyTo(destScopeLog.Scope())
-			destScopeLog.SetSchemaUrl(srcScopeLog.SchemaUrl())
-			logRecords.MoveFirstNTo(remaining, destScopeLog.LogRecords())
-			remaining = 0
-		}
+			// If possible to move all metrics do that.
+			srcIllLRC := srcIll.LogRecords().Len()
+			if size >= srcIllLRC+totalCopiedLogRecords {
+				totalCopiedLogRecords += srcIllLRC
+				srcIll.MoveTo(destRl.ScopeLogs().AppendEmpty())
+				return true
+			}
 
-		if srcScopeLogs.Len() == 0 {
-			removeFirstResourceLogs(srcResourceLogs)
-		}
-	}
+			destIll := destRl.ScopeLogs().AppendEmpty()
+			srcIll.Scope().CopyTo(destIll.Scope())
+			destIll.SetSchemaUrl(srcIll.SchemaUrl())
+			srcIll.LogRecords().RemoveIf(func(srcMetric plog.LogRecord) bool {
+				// If we are done skip everything else.
+				if totalCopiedLogRecords == size {
+					return false
+				}
+				srcMetric.MoveTo(destIll.LogRecords().AppendEmpty())
+				totalCopiedLogRecords++
+				return true
+			})
+			return false
+		})
+		return srcRl.ScopeLogs().Len() == 0
+	})
 
 	return dest
 }
 
-func moveFirstResourceLogs(src, dest plog.ResourceLogsSlice) {
-	moved := false
-	src.RemoveIf(func(resourceLogs plog.ResourceLogs) bool {
-		if moved {
-			return false
-		}
-		resourceLogs.MoveTo(dest.AppendEmpty())
-		moved = true
-		return true
-	})
-}
+func splitOneResourceOneScopeLogs(size int, src plog.Logs) (plog.Logs, bool) {
+	srcResourceLogs := src.ResourceLogs()
+	if srcResourceLogs.Len() != 1 {
+		return plog.Logs{}, false
+	}
 
-func removeFirstResourceLogs(src plog.ResourceLogsSlice) {
-	removed := false
-	src.RemoveIf(func(plog.ResourceLogs) bool {
-		if removed {
-			return false
-		}
-		removed = true
-		return true
-	})
-}
+	srcResourceLog := srcResourceLogs.At(0)
+	srcScopeLogs := srcResourceLog.ScopeLogs()
+	if srcScopeLogs.Len() != 1 {
+		return plog.Logs{}, false
+	}
 
-func moveFirstScopeLogs(src, dest plog.ScopeLogsSlice) {
-	moved := false
-	src.RemoveIf(func(scopeLogs plog.ScopeLogs) bool {
-		if moved {
-			return false
-		}
-		scopeLogs.MoveTo(dest.AppendEmpty())
-		moved = true
-		return true
-	})
+	srcScopeLog := srcScopeLogs.At(0)
+	if srcScopeLog.LogRecords().Len() <= size {
+		return plog.Logs{}, false
+	}
+
+	dest := plog.NewLogs()
+	destResourceLog := dest.ResourceLogs().AppendEmpty()
+	srcResourceLog.Resource().CopyTo(destResourceLog.Resource())
+	destResourceLog.SetSchemaUrl(srcResourceLog.SchemaUrl())
+	destScopeLog := destResourceLog.ScopeLogs().AppendEmpty()
+	srcScopeLog.Scope().CopyTo(destScopeLog.Scope())
+	destScopeLog.SetSchemaUrl(srcScopeLog.SchemaUrl())
+	srcScopeLog.LogRecords().MoveFirstNTo(size, destScopeLog.LogRecords())
+
+	return dest, true
 }
 
 // resourceLRC calculates the total number of log records in the plog.ResourceLogs.

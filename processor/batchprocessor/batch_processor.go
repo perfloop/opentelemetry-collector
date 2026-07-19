@@ -529,10 +529,11 @@ func (bm *batchMetrics) add(md pmetric.Metrics) {
 }
 
 type batchLogs struct {
-	nextConsumer consumer.Logs
-	logData      plog.Logs
-	logCount     int
-	sizer        plog.Sizer
+	nextConsumer        consumer.Logs
+	logData             plog.Logs
+	logCount            int
+	singleResourceScope bool
+	sizer               plog.Sizer
 }
 
 func newBatchLogs(nextConsumer consumer.Logs) *batchLogs {
@@ -552,7 +553,16 @@ func (bl *batchLogs) split(sendBatchMaxSize int) (int, plog.Logs) {
 	var sent int
 
 	if sendBatchMaxSize > 0 && bl.logCount > sendBatchMaxSize {
-		ld = splitLogsWithKnownSize(sendBatchMaxSize, bl.logData)
+		if bl.singleResourceScope {
+			var split bool
+			ld, split = splitOneResourceOneScopeLogs(sendBatchMaxSize, bl.logData)
+			if !split {
+				bl.singleResourceScope = false
+				ld = splitLogs(sendBatchMaxSize, bl.logData)
+			}
+		} else {
+			ld = splitLogs(sendBatchMaxSize, bl.logData)
+		}
 		bl.logCount -= sendBatchMaxSize
 		sent = sendBatchMaxSize
 	} else {
@@ -560,6 +570,7 @@ func (bl *batchLogs) split(sendBatchMaxSize int) (int, plog.Logs) {
 		sent = bl.logCount
 		bl.logData = plog.NewLogs()
 		bl.logCount = 0
+		bl.singleResourceScope = false
 	}
 	return sent, ld
 }
@@ -573,6 +584,11 @@ func (bl *batchLogs) add(ld plog.Logs) {
 	newLogsCount := ld.LogRecordCount()
 	if newLogsCount == 0 {
 		return
+	}
+	if bl.logCount == 0 {
+		bl.singleResourceScope = ld.ResourceLogs().Len() == 1 && ld.ResourceLogs().At(0).ScopeLogs().Len() == 1
+	} else {
+		bl.singleResourceScope = false
 	}
 	bl.logCount += newLogsCount
 	ld.ResourceLogs().MoveAndAppendTo(bl.logData.ResourceLogs())
