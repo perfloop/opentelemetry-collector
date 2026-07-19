@@ -552,7 +552,7 @@ func (bl *batchLogs) split(sendBatchMaxSize int) (int, plog.Logs) {
 	var sent int
 
 	if sendBatchMaxSize > 0 && bl.logCount > sendBatchMaxSize {
-		ld = splitLogs(sendBatchMaxSize, bl.logData)
+		ld = splitLogsWithKnownSize(sendBatchMaxSize, bl.logData)
 		bl.logCount -= sendBatchMaxSize
 		sent = sendBatchMaxSize
 	} else {
