@@ -30,3 +30,19 @@ func TestLogRecordSliceMoveFirstNTo(t *testing.T) {
 	require.Equal(t, "first", destination.At(1).SeverityText())
 	require.Equal(t, "second", destination.At(2).SeverityText())
 }
+
+func TestLogRecordSliceMoveFirstNToAliased(t *testing.T) {
+	logs := NewLogs()
+	source := logs.ResourceLogs().AppendEmpty().ScopeLogs().AppendEmpty().LogRecords()
+	for _, severityText := range []string{"first", "second", "third"} {
+		source.AppendEmpty().SetSeverityText(severityText)
+	}
+
+	destination := logs.ResourceLogs().At(0).ScopeLogs().At(0).LogRecords()
+	source.MoveFirstNTo(1, destination)
+
+	require.Equal(t, 3, source.Len())
+	for index, expected := range []string{"first", "second", "third"} {
+		require.Equal(t, expected, source.At(index).SeverityText())
+	}
+}
