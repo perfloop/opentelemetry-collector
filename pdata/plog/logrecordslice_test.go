@@ -16,9 +16,13 @@ func TestLogRecordSliceMoveFirstNTo(t *testing.T) {
 	source.AppendEmpty().SetSeverityText("third")
 	destination := NewLogRecordSlice()
 	destination.AppendEmpty().SetSeverityText("existing")
+	backing := *source.orig
 
 	source.MoveFirstNTo(2, destination)
 
+	// The suffix shares the backing array, so it must not retain moved records.
+	require.Nil(t, backing[0])
+	require.Nil(t, backing[1])
 	require.Equal(t, 1, source.Len())
 	require.Equal(t, "third", source.At(0).SeverityText())
 	require.Equal(t, 3, destination.Len())
