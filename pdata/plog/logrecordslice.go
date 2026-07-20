@@ -3,9 +3,10 @@
 
 package plog // import "go.opentelemetry.io/collector/pdata/plog"
 
-// MoveFirstNTo appends the first count LogRecord values from es to dest in source order
-// and removes them from es. count must be greater than zero and less than es.Len().
-// If es and dest designate the same slice, it does nothing.
+// MoveFirstNTo appends the first count LogRecord values from es to dest in source order.
+// It preserves existing dest values and removes the transferred values from es.
+// count must be greater than zero and less than es.Len(). If es and dest designate
+// the same slice, it does nothing.
 func (es LogRecordSlice) MoveFirstNTo(count int, dest LogRecordSlice) {
 	es.state.AssertMutable()
 	dest.state.AssertMutable()
