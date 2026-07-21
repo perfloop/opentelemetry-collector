@@ -20,7 +20,16 @@ import (
 type {{ .structName }} internal.{{ .structName }}Wrapper
 
 func (ms {{ .structName }}) getOrig() *[]{{ .itemType }} {
+	{{- if .usesSourceByteResolver }}
+	orig := internal.Get{{ .structName }}Orig(internal.{{ .structName }}Wrapper(ms))
+	state := ms.getState()
+	if state == nil {
+		return orig
+	}
+	return state.ResolveByteSlice(orig)
+	{{- else }}
 	return internal.Get{{ .structName }}Orig(internal.{{ .structName }}Wrapper(ms))
+	{{- end }}
 }
 
 func (ms {{ .structName }}) getState() *internal.State {

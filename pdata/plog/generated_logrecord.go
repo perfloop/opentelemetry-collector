@@ -43,128 +43,124 @@ func (ms LogRecord) MoveTo(dest LogRecord) {
 	ms.state.AssertMutable()
 	dest.state.AssertMutable()
 	// If they point to the same data, they are the same, nothing to do.
-	if ms.getOrig() == dest.getOrig() {
+	if ms.orig == dest.orig {
 		return
 	}
-	internal.DeleteLogRecord(dest.getOrig(), false)
-	*dest.getOrig(), *ms.getOrig() = *ms.getOrig(), *dest.getOrig()
+	internal.DeleteLogRecord(dest.orig, false)
+	*dest.orig, *ms.orig = *ms.orig, *dest.orig
 }
 
 // Timestamp returns the timestamp associated with this LogRecord.
 func (ms LogRecord) Timestamp() pcommon.Timestamp {
-	return pcommon.Timestamp(ms.getOrig().TimeUnixNano)
+	return pcommon.Timestamp(ms.orig.TimeUnixNano)
 }
 
 // SetTimestamp replaces the timestamp associated with this LogRecord.
 func (ms LogRecord) SetTimestamp(v pcommon.Timestamp) {
 	ms.state.AssertMutable()
-	ms.getOrig().TimeUnixNano = uint64(v)
+	ms.orig.TimeUnixNano = uint64(v)
 }
 
 // ObservedTimestamp returns the observedtimestamp associated with this LogRecord.
 func (ms LogRecord) ObservedTimestamp() pcommon.Timestamp {
-	return pcommon.Timestamp(ms.getOrig().ObservedTimeUnixNano)
+	return pcommon.Timestamp(ms.orig.ObservedTimeUnixNano)
 }
 
 // SetObservedTimestamp replaces the observedtimestamp associated with this LogRecord.
 func (ms LogRecord) SetObservedTimestamp(v pcommon.Timestamp) {
 	ms.state.AssertMutable()
-	ms.getOrig().ObservedTimeUnixNano = uint64(v)
+	ms.orig.ObservedTimeUnixNano = uint64(v)
 }
 
 // SeverityNumber returns the severitynumber associated with this LogRecord.
 func (ms LogRecord) SeverityNumber() SeverityNumber {
-	return SeverityNumber(ms.getOrig().SeverityNumber)
+	return SeverityNumber(ms.orig.SeverityNumber)
 }
 
 // SetSeverityNumber replaces the severitynumber associated with this LogRecord.
 func (ms LogRecord) SetSeverityNumber(v SeverityNumber) {
 	ms.state.AssertMutable()
-	ms.getOrig().SeverityNumber = internal.SeverityNumber(v)
+	ms.orig.SeverityNumber = internal.SeverityNumber(v)
 }
 
 // SeverityText returns the severitytext associated with this LogRecord.
 func (ms LogRecord) SeverityText() string {
-	return ms.getOrig().SeverityText
+	return ms.orig.SeverityText
 }
 
 // SetSeverityText replaces the severitytext associated with this LogRecord.
 func (ms LogRecord) SetSeverityText(v string) {
 	ms.state.AssertMutable()
-	ms.getOrig().SeverityText = v
+	ms.orig.SeverityText = v
 }
 
 // Body returns the body associated with this LogRecord.
 func (ms LogRecord) Body() pcommon.Value {
-	return pcommon.Value(internal.NewValueWrapper(&ms.getOrig().Body, ms.state))
+	return pcommon.Value(internal.NewValueWrapper(&ms.orig.Body, ms.state))
 }
 
 // Attributes returns the Attributes associated with this LogRecord.
 func (ms LogRecord) Attributes() pcommon.Map {
-	return pcommon.Map(internal.NewMapWrapper(&ms.getOrig().Attributes, ms.state))
+	return pcommon.Map(internal.NewMapWrapper(&ms.orig.Attributes, ms.state))
 }
 
 // DroppedAttributesCount returns the droppedattributescount associated with this LogRecord.
 func (ms LogRecord) DroppedAttributesCount() uint32 {
-	return ms.getOrig().DroppedAttributesCount
+	return ms.orig.DroppedAttributesCount
 }
 
 // SetDroppedAttributesCount replaces the droppedattributescount associated with this LogRecord.
 func (ms LogRecord) SetDroppedAttributesCount(v uint32) {
 	ms.state.AssertMutable()
-	ms.getOrig().DroppedAttributesCount = v
+	ms.orig.DroppedAttributesCount = v
 }
 
 // Flags returns the flags associated with this LogRecord.
 func (ms LogRecord) Flags() LogRecordFlags {
-	return LogRecordFlags(ms.getOrig().Flags)
+	return LogRecordFlags(ms.orig.Flags)
 }
 
 // SetFlags replaces the flags associated with this LogRecord.
 func (ms LogRecord) SetFlags(v LogRecordFlags) {
 	ms.state.AssertMutable()
-	ms.getOrig().Flags = uint32(v)
+	ms.orig.Flags = uint32(v)
 }
 
 // TraceID returns the traceid associated with this LogRecord.
 func (ms LogRecord) TraceID() pcommon.TraceID {
-	return pcommon.TraceID(ms.getOrig().TraceId)
+	return pcommon.TraceID(ms.orig.TraceId)
 }
 
 // SetTraceID replaces the traceid associated with this LogRecord.
 func (ms LogRecord) SetTraceID(v pcommon.TraceID) {
 	ms.state.AssertMutable()
-	ms.getOrig().TraceId = internal.TraceID(v)
+	ms.orig.TraceId = internal.TraceID(v)
 }
 
 // SpanID returns the spanid associated with this LogRecord.
 func (ms LogRecord) SpanID() pcommon.SpanID {
-	return pcommon.SpanID(ms.getOrig().SpanId)
+	return pcommon.SpanID(ms.orig.SpanId)
 }
 
 // SetSpanID replaces the spanid associated with this LogRecord.
 func (ms LogRecord) SetSpanID(v pcommon.SpanID) {
 	ms.state.AssertMutable()
-	ms.getOrig().SpanId = internal.SpanID(v)
+	ms.orig.SpanId = internal.SpanID(v)
 }
 
 // EventName returns the eventname associated with this LogRecord.
 func (ms LogRecord) EventName() string {
-	return ms.getOrig().EventName
+	return ms.orig.EventName
 }
 
 // SetEventName replaces the eventname associated with this LogRecord.
 func (ms LogRecord) SetEventName(v string) {
 	ms.state.AssertMutable()
-	ms.getOrig().EventName = v
+	ms.orig.EventName = v
 }
 
 // CopyTo copies all properties from the current struct overriding the destination.
 func (ms LogRecord) CopyTo(dest LogRecord) {
 	dest.state.AssertMutable()
-	internal.CopyLogRecord(dest.getOrig(), ms.getOrig())
-}
-
-func (ms LogRecord) getOrig() *internal.LogRecord {
-	return ms.state.ResolveLogRecord(ms.orig)
+	internal.CopyLogRecord(dest.orig, ms.orig)
 }

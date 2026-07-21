@@ -29,31 +29,29 @@ func (es LogRecordSlice) MoveFirstNTo(count int, dest LogRecordSlice) {
 	clear(srcRecords[:count])
 	*es.orig = srcRecords[count:]
 
-	// movedRecords are the newly allocated destination holders. Retained source
-	// LogRecord wrappers still point to the cleared source records and are never
-	// entered in the destination replacement map.
 	movedRecords := destRecords[destLen:]
 	if es.state == dest.state {
 		// A shared state cannot distinguish source mutation from destination use.
-		// No caller can retain a wrapper for the newly allocated destination holder,
-		// so it does not need a replacement mapping.
-		copyMovedLogRecords(dest.state, dest.orig, movedRecords, false)
+		// Copy the known appended range without registering a shared-state resolver.
+		for index, movedRecord := range movedRecords {
+			destRecords[destLen+index] = copyLogRecord(movedRecord)
+		}
 		return
 	}
 
-	// Handles retained from es still carry es.state even though their records
-	// now belong to dest. Copy those records before a source mutation or a
-	// later destination transfer can expose the shared data.
-	transfer := &logRecordTransfer{state: dest.state, dest: dest.orig, records: movedRecords}
+	// Handles retained from es carry es.state even though their nested values
+	// now reside in dest. On the first source mutation or destination lifecycle
+	// transition, redirect those source-state handles to isolated copies while
+	// preserving the original destination record and its handles.
+	transfer := &logRecordTransfer{sourceState: es.state, records: movedRecords}
 	es.state.OnMutation(transfer.detach)
 	dest.state.OnLogRecordMove(dest.orig, transfer.detach)
 }
 
 type logRecordTransfer struct {
-	state    *internal.State
-	dest     *[]*internal.LogRecord
-	records  []*internal.LogRecord
-	detached bool
+	sourceState *internal.State
+	records     []*internal.LogRecord
+	detached    bool
 }
 
 func (transfer *logRecordTransfer) detach() {
@@ -61,22 +59,54 @@ func (transfer *logRecordTransfer) detach() {
 		return
 	}
 	transfer.detached = true
-	copyMovedLogRecords(transfer.state, transfer.dest, transfer.records, true)
-	transfer.state = nil
-	transfer.dest = nil
+	for _, record := range transfer.records {
+		copySourceLogRecordValues(transfer.sourceState, record)
+	}
+	transfer.sourceState = nil
 	transfer.records = nil
 }
 
-func copyMovedLogRecords(state *internal.State, dest *[]*internal.LogRecord, movedRecords []*internal.LogRecord, replaceWrappers bool) {
-	for _, movedRecord := range movedRecords {
-		for index, destinationRecord := range *dest {
-			if destinationRecord == movedRecord {
-				replacement := copyLogRecord(movedRecord)
-				(*dest)[index] = replacement
-				if replaceWrappers {
-					state.ReplaceLogRecord(movedRecord, replacement)
-				}
-			}
+func copySourceLogRecordValues(state *internal.State, record *internal.LogRecord) {
+	replacement := copyLogRecord(record)
+	state.ReplaceKeyValueSlice(&record.Attributes, &replacement.Attributes)
+	copySourceAnyValue(state, &record.Body, &replacement.Body)
+	for index := range record.Attributes {
+		copySourceAnyValue(state, &record.Attributes[index].Value, &replacement.Attributes[index].Value)
+	}
+}
+
+func copySourceAnyValue(state *internal.State, value, replacement *internal.AnyValue) {
+	state.ReplaceAnyValue(value, replacement)
+
+	switch sourceValue := value.Value.(type) {
+	case *internal.AnyValue_BytesValue:
+		replacementValue, ok := replacement.Value.(*internal.AnyValue_BytesValue)
+		if ok {
+			state.ReplaceByteSlice(&sourceValue.BytesValue, &replacementValue.BytesValue)
+		}
+	case *internal.AnyValue_ArrayValue:
+		if sourceValue.ArrayValue == nil {
+			return
+		}
+		replacementValue, ok := replacement.Value.(*internal.AnyValue_ArrayValue)
+		if !ok || replacementValue.ArrayValue == nil {
+			return
+		}
+		state.ReplaceAnyValueSlice(&sourceValue.ArrayValue.Values, &replacementValue.ArrayValue.Values)
+		for index := range sourceValue.ArrayValue.Values {
+			copySourceAnyValue(state, &sourceValue.ArrayValue.Values[index], &replacementValue.ArrayValue.Values[index])
+		}
+	case *internal.AnyValue_KvlistValue:
+		if sourceValue.KvlistValue == nil {
+			return
+		}
+		replacementValue, ok := replacement.Value.(*internal.AnyValue_KvlistValue)
+		if !ok || replacementValue.KvlistValue == nil {
+			return
+		}
+		state.ReplaceKeyValueSlice(&sourceValue.KvlistValue.Values, &replacementValue.KvlistValue.Values)
+		for index := range sourceValue.KvlistValue.Values {
+			copySourceAnyValue(state, &sourceValue.KvlistValue.Values[index].Value, &replacementValue.KvlistValue.Values[index].Value)
 		}
 	}
 }

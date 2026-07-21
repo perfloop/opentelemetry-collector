@@ -186,7 +186,16 @@ func (es {{ .structName }}) Sort(less func(a, b {{ .elementName }}) bool) {
 
 {{ if .hasWrapper -}}
 func (ms {{ .structName }}) getOrig() *[]{{ if .elementNullable }}*{{ end }}internal.{{ .elementOriginName }} {
+	{{- if .usesSourceAnyValueResolver }}
+	orig := internal.Get{{ .structName }}Orig(internal.{{ .structName }}Wrapper(ms))
+	state := ms.getState()
+	if state == nil {
+		return orig
+	}
+	return state.ResolveAnyValueSlice(orig)
+	{{- else }}
 	return internal.Get{{ .structName }}Orig(internal.{{ .structName }}Wrapper(ms))
+	{{- end }}
 }
 
 func (ms {{ .structName }}) getState() *internal.State {

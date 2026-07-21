@@ -142,7 +142,12 @@ func newValue(orig *internal.AnyValue, state *internal.State) Value {
 }
 
 func (v Value) getOrig() *internal.AnyValue {
-	return internal.GetValueOrig(internal.ValueWrapper(v))
+	orig := internal.GetValueOrig(internal.ValueWrapper(v))
+	state := v.getState()
+	if state == nil {
+		return orig
+	}
+	return state.ResolveAnyValue(orig)
 }
 
 func (v Value) getState() *internal.State {
@@ -154,6 +159,7 @@ func (v Value) getState() *internal.State {
 func (v Value) FromRaw(iv any) error {
 	switch tv := iv.(type) {
 	case nil:
+		v.getState().AssertMutable()
 		v.getOrig().Value = nil
 	case string:
 		v.SetStr(tv)

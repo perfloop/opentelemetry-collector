@@ -148,7 +148,12 @@ func (es Slice) CopyTo(dest Slice) {
 }
 
 func (ms Slice) getOrig() *[]internal.AnyValue {
-	return internal.GetSliceOrig(internal.SliceWrapper(ms))
+	orig := internal.GetSliceOrig(internal.SliceWrapper(ms))
+	state := ms.getState()
+	if state == nil {
+		return orig
+	}
+	return state.ResolveAnyValueSlice(orig)
 }
 
 func (ms Slice) getState() *internal.State {

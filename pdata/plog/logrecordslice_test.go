@@ -77,6 +77,133 @@ func TestLogRecordSliceMoveFirstNTo(t *testing.T) {
 	}
 }
 
+func TestLogRecordSliceMoveFirstNToFromRawNil(t *testing.T) {
+	for _, pooling := range []bool{false, true} {
+		t.Run("Pooling="+strconv.FormatBool(pooling), func(t *testing.T) {
+			previousPooling := metadata.PdataUseProtoPoolingFeatureGate.IsEnabled()
+			require.NoError(t, featuregate.GlobalRegistry().Set(metadata.PdataUseProtoPoolingFeatureGate.ID(), pooling))
+			t.Cleanup(func() {
+				require.NoError(t, featuregate.GlobalRegistry().Set(metadata.PdataUseProtoPoolingFeatureGate.ID(), previousPooling))
+			})
+
+			sourceLogs := NewLogs()
+			source := sourceLogs.ResourceLogs().AppendEmpty().ScopeLogs().AppendEmpty().LogRecords()
+			record := source.AppendEmpty()
+			retainedArray := record.Attributes().PutEmptySlice("array").AppendEmpty()
+			retainedArray.SetEmptyBytes().FromRaw([]byte{1, 2})
+			record.Attributes().PutEmptyMap("kv-list").PutEmptyBytes("bytes").FromRaw([]byte{3, 4})
+			retainedKVList, found := record.Attributes().Get("kv-list")
+			require.True(t, found)
+			retainedKV, found := retainedKVList.Map().Get("bytes")
+			require.True(t, found)
+
+			destinationLogs := NewLogs()
+			destination := destinationLogs.ResourceLogs().AppendEmpty().ScopeLogs().AppendEmpty().LogRecords()
+			source.MoveFirstNTo(1, destination)
+
+			require.NoError(t, retainedArray.FromRaw(nil))
+			require.NoError(t, retainedKV.FromRaw(nil))
+			destinationLogs.MarkReadOnly()
+
+			destinationRecord := destination.At(0)
+			array, found := destinationRecord.Attributes().Get("array")
+			require.True(t, found)
+			require.Equal(t, []byte{1, 2}, array.Slice().At(0).Bytes().AsRaw())
+			kvListValue, found := destinationRecord.Attributes().Get("kv-list")
+			require.True(t, found)
+			kvValue, found := kvListValue.Map().Get("bytes")
+			require.True(t, found)
+			require.Equal(t, []byte{3, 4}, kvValue.Bytes().AsRaw())
+		})
+	}
+}
+
+func TestLogRecordSliceMoveFirstNToDestinationHandles(t *testing.T) {
+	for _, pooling := range []bool{false, true} {
+		t.Run("Pooling="+strconv.FormatBool(pooling), func(t *testing.T) {
+			previousPooling := metadata.PdataUseProtoPoolingFeatureGate.IsEnabled()
+			require.NoError(t, featuregate.GlobalRegistry().Set(metadata.PdataUseProtoPoolingFeatureGate.ID(), pooling))
+			t.Cleanup(func() {
+				require.NoError(t, featuregate.GlobalRegistry().Set(metadata.PdataUseProtoPoolingFeatureGate.ID(), previousPooling))
+			})
+
+			sourceLogs := NewLogs()
+			source := sourceLogs.ResourceLogs().AppendEmpty().ScopeLogs().AppendEmpty().LogRecords()
+			sourceRecord := source.AppendEmpty()
+			retainedSourceBody := sourceRecord.Body()
+			retainedSourceBody.SetEmptyBytes().FromRaw([]byte{1, 2})
+			retainedSourceBytes := retainedSourceBody.Bytes()
+			sourceNested := sourceRecord.Attributes().PutEmptySlice("array").AppendEmpty()
+			sourceNested.SetEmptyBytes().FromRaw([]byte{3, 4})
+
+			destinationLogs := NewLogs()
+			destination := destinationLogs.ResourceLogs().AppendEmpty().ScopeLogs().AppendEmpty().LogRecords()
+			source.MoveFirstNTo(1, destination)
+			destinationRecord := destination.At(0)
+			destinationBody := destinationRecord.Body()
+			destinationBodyBytes := destinationBody.Bytes()
+			destinationArray, found := destinationRecord.Attributes().Get("array")
+			require.True(t, found)
+			destinationNestedBytes := destinationArray.Slice().At(0).Bytes()
+
+			retainedSourceBytes.SetAt(0, 9)
+			destinationBodyBytes.SetAt(0, 8)
+			destinationBody.SetStr("changed destination body")
+			destinationNestedBytes.SetAt(0, 7)
+
+			require.Equal(t, "changed destination body", destinationRecord.Body().Str())
+			array, found := destinationRecord.Attributes().Get("array")
+			require.True(t, found)
+			require.Equal(t, []byte{7, 4}, array.Slice().At(0).Bytes().AsRaw())
+		})
+	}
+}
+
+func TestLogRecordSliceMoveFirstNToDestinationHandlesAfterRetransfer(t *testing.T) {
+	for _, pooling := range []bool{false, true} {
+		t.Run("Pooling="+strconv.FormatBool(pooling), func(t *testing.T) {
+			previousPooling := metadata.PdataUseProtoPoolingFeatureGate.IsEnabled()
+			require.NoError(t, featuregate.GlobalRegistry().Set(metadata.PdataUseProtoPoolingFeatureGate.ID(), pooling))
+			t.Cleanup(func() {
+				require.NoError(t, featuregate.GlobalRegistry().Set(metadata.PdataUseProtoPoolingFeatureGate.ID(), previousPooling))
+			})
+
+			sourceLogs := NewLogs()
+			source := sourceLogs.ResourceLogs().AppendEmpty().ScopeLogs().AppendEmpty().LogRecords()
+			sourceRecord := source.AppendEmpty()
+			retainedSourceBody := sourceRecord.Body()
+			retainedSourceBody.SetEmptyBytes().FromRaw([]byte{1, 2})
+			retainedSourceBytes := retainedSourceBody.Bytes()
+			sourceNested := sourceRecord.Attributes().PutEmptySlice("array").AppendEmpty()
+			sourceNested.SetEmptyBytes().FromRaw([]byte{3, 4})
+
+			destinationLogs := NewLogs()
+			destination := destinationLogs.ResourceLogs().AppendEmpty().ScopeLogs().AppendEmpty().LogRecords()
+			source.MoveFirstNTo(1, destination)
+			destinationRecord := destination.At(0)
+			destinationBody := destinationRecord.Body()
+			destinationBodyBytes := destinationBody.Bytes()
+			destinationArray, found := destinationRecord.Attributes().Get("array")
+			require.True(t, found)
+			destinationNestedBytes := destinationArray.Slice().At(0).Bytes()
+
+			nextLogs := NewLogs()
+			next := nextLogs.ResourceLogs().AppendEmpty().ScopeLogs().AppendEmpty().LogRecords()
+			destination.MoveAndAppendTo(next)
+			nextRecord := next.At(0)
+			retainedSourceBytes.SetAt(0, 9)
+			destinationBodyBytes.SetAt(0, 8)
+			destinationBody.SetStr("changed destination body")
+			destinationNestedBytes.SetAt(0, 7)
+
+			require.Equal(t, "changed destination body", nextRecord.Body().Str())
+			array, found := nextRecord.Attributes().Get("array")
+			require.True(t, found)
+			require.Equal(t, []byte{7, 4}, array.Slice().At(0).Bytes().AsRaw())
+		})
+	}
+}
+
 func TestLogRecordSliceMoveFirstNToSourceMutation(t *testing.T) {
 	sourceLogs := NewLogs()
 	source := sourceLogs.ResourceLogs().AppendEmpty().ScopeLogs().AppendEmpty().LogRecords()

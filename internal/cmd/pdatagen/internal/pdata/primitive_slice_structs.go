@@ -73,18 +73,23 @@ func (iss *primitiveSliceStruct) getProtoMessage() *proto.Message {
 
 func (iss *primitiveSliceStruct) templateFields(packageInfo *PackageInfo) map[string]any {
 	return map[string]any{
-		"structName":           iss.getName(),
-		"itemType":             iss.itemType,
-		"elementOriginName":    iss.getElementOriginName(),
-		"lowerStructName":      strings.ToLower(iss.structName[:1]) + iss.structName[1:],
-		"testOrigVal":          iss.testOrigVal,
-		"testInterfaceOrigVal": iss.testInterfaceOrigVal,
-		"testSetVal":           iss.testSetVal,
-		"testNewVal":           iss.testNewVal,
-		"packageName":          packageInfo.name,
-		"imports":              packageInfo.imports,
-		"testImports":          packageInfo.testImports,
+		"structName":             iss.getName(),
+		"usesSourceByteResolver": iss.usesSourceByteResolver(packageInfo.name),
+		"itemType":               iss.itemType,
+		"elementOriginName":      iss.getElementOriginName(),
+		"lowerStructName":        strings.ToLower(iss.structName[:1]) + iss.structName[1:],
+		"testOrigVal":            iss.testOrigVal,
+		"testInterfaceOrigVal":   iss.testInterfaceOrigVal,
+		"testSetVal":             iss.testSetVal,
+		"testNewVal":             iss.testNewVal,
+		"packageName":            packageInfo.name,
+		"imports":                packageInfo.imports,
+		"testImports":            packageInfo.testImports,
 	}
+}
+
+func (iss *primitiveSliceStruct) usesSourceByteResolver(packageName string) bool {
+	return packageName == "pcommon" && iss.structName == "ByteSlice"
 }
 
 func upperFirst(s string) string {

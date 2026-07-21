@@ -55,6 +55,7 @@ func (ss *messageSlice) templateFields(packageInfo *PackageInfo) map[string]any 
 		"hasWrapper":                     usedByOtherDataTypes(ss.packageName),
 		"usesDeferredLogRecordTransfers": ss.usesDeferredLogRecordTransfers(packageInfo.name),
 		"usesLogRecordSliceTransfer":     ss.isLogRecordSlice(packageInfo.name),
+		"usesSourceAnyValueResolver":     ss.usesSourceAnyValueResolver(packageInfo.name),
 		"structName":                     ss.structName,
 		"elementName":                    ss.element.getName(),
 		"elementOriginName":              ss.getElementOriginName(),
@@ -81,6 +82,10 @@ func (ss *messageSlice) usesDeferredLogRecordTransfers(packageName string) bool 
 
 func (ss *messageSlice) isLogRecordSlice(packageName string) bool {
 	return packageName == "plog" && ss.element.structName == "LogRecord"
+}
+
+func (ss *messageSlice) usesSourceAnyValueResolver(packageName string) bool {
+	return packageName == "pcommon" && ss.structName == "Slice"
 }
 
 func (ss *messageSlice) getOriginName() string {

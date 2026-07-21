@@ -77,24 +77,12 @@ func (ms *messageStruct) templateFields(packageInfo *PackageInfo) map[string]any
 		"description":                    ms.description,
 		"hasWrapper":                     hasWrapper,
 		"usesDeferredLogRecordTransfers": ms.usesDeferredLogRecordTransfers(packageInfo.name),
-		"usesLogRecordOrigResolver":      ms.isLogRecord(),
-		"origAccessor":                   ms.origAccessor(hasWrapper),
+		"origAccessor":                   origAccessor(hasWrapper),
 		"stateAccessor":                  stateAccessor(hasWrapper),
 		"packageName":                    packageInfo.name,
 		"imports":                        packageInfo.imports,
 		"testImports":                    packageInfo.testImports,
 	}
-}
-
-func (ms *messageStruct) origAccessor(hasWrapper bool) string {
-	if ms.isLogRecord() {
-		return "getOrig()"
-	}
-	return origAccessor(hasWrapper)
-}
-
-func (ms *messageStruct) isLogRecord() bool {
-	return ms.structName == "LogRecord" && ms.protoName == "LogRecord"
 }
 
 func (ms *messageStruct) usesDeferredLogRecordTransfers(packageName string) bool {

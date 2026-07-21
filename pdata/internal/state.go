@@ -10,11 +10,18 @@ import (
 type State struct {
 	onLogRecordMoveRecords         *[]*LogRecord
 	onLogRecordMove                func()
-	movedLogRecords                map[*LogRecord]*LogRecord
+	movedValues                    *movedValues
 	onMutation                     []func()
 	onAdditionalLogRecordMoveFuncs []logRecordMoveFunc
 	refs                           atomic.Int32
 	state                          uint32
+}
+
+type movedValues struct {
+	anyValues      map[*AnyValue]*AnyValue
+	byteSlices     map[*[]byte]*[]byte
+	keyValueSlices map[*[]KeyValue]*[]KeyValue
+	anyValueSlices map[*[]AnyValue]*[]AnyValue
 }
 
 type logRecordMoveFunc struct {
@@ -109,22 +116,102 @@ func (st *State) BeforeLogRecordMove() {
 	st.onAdditionalLogRecordMoveFuncs = nil
 }
 
-// ReplaceLogRecord records the replacement for wrappers that still point to old.
-func (st *State) ReplaceLogRecord(old, replacement *LogRecord) {
-	if st.movedLogRecords == nil {
-		st.movedLogRecords = make(map[*LogRecord]*LogRecord)
+func (st *State) sourceValues() *movedValues {
+	if st.movedValues == nil {
+		st.movedValues = &movedValues{}
 	}
-	st.movedLogRecords[old] = replacement
+	return st.movedValues
 }
 
-// ResolveLogRecord returns the current record for a wrapper that may predate a move.
-func (st *State) ResolveLogRecord(record *LogRecord) *LogRecord {
+// ReplaceAnyValue records the source-owned replacement for an AnyValue wrapper.
+func (st *State) ReplaceAnyValue(old, replacement *AnyValue) {
+	moved := st.sourceValues()
+	if moved.anyValues == nil {
+		moved.anyValues = make(map[*AnyValue]*AnyValue)
+	}
+	moved.anyValues[old] = replacement
+}
+
+// ResolveAnyValue returns the source-owned replacement for an AnyValue wrapper.
+func (st *State) ResolveAnyValue(value *AnyValue) *AnyValue {
+	if st.movedValues == nil {
+		return value
+	}
 	for {
-		replacement, ok := st.movedLogRecords[record]
+		replacement, ok := st.movedValues.anyValues[value]
 		if !ok {
-			return record
+			return value
 		}
-		record = replacement
+		value = replacement
+	}
+}
+
+// ReplaceByteSlice records the source-owned replacement for a ByteSlice wrapper.
+func (st *State) ReplaceByteSlice(old, replacement *[]byte) {
+	moved := st.sourceValues()
+	if moved.byteSlices == nil {
+		moved.byteSlices = make(map[*[]byte]*[]byte)
+	}
+	moved.byteSlices[old] = replacement
+}
+
+// ResolveByteSlice returns the source-owned replacement for a ByteSlice wrapper.
+func (st *State) ResolveByteSlice(value *[]byte) *[]byte {
+	if st.movedValues == nil {
+		return value
+	}
+	for {
+		replacement, ok := st.movedValues.byteSlices[value]
+		if !ok {
+			return value
+		}
+		value = replacement
+	}
+}
+
+// ReplaceKeyValueSlice records the source-owned replacement for a Map wrapper.
+func (st *State) ReplaceKeyValueSlice(old, replacement *[]KeyValue) {
+	moved := st.sourceValues()
+	if moved.keyValueSlices == nil {
+		moved.keyValueSlices = make(map[*[]KeyValue]*[]KeyValue)
+	}
+	moved.keyValueSlices[old] = replacement
+}
+
+// ResolveKeyValueSlice returns the source-owned replacement for a Map wrapper.
+func (st *State) ResolveKeyValueSlice(value *[]KeyValue) *[]KeyValue {
+	if st.movedValues == nil {
+		return value
+	}
+	for {
+		replacement, ok := st.movedValues.keyValueSlices[value]
+		if !ok {
+			return value
+		}
+		value = replacement
+	}
+}
+
+// ReplaceAnyValueSlice records the source-owned replacement for a Slice wrapper.
+func (st *State) ReplaceAnyValueSlice(old, replacement *[]AnyValue) {
+	moved := st.sourceValues()
+	if moved.anyValueSlices == nil {
+		moved.anyValueSlices = make(map[*[]AnyValue]*[]AnyValue)
+	}
+	moved.anyValueSlices[old] = replacement
+}
+
+// ResolveAnyValueSlice returns the source-owned replacement for a Slice wrapper.
+func (st *State) ResolveAnyValueSlice(value *[]AnyValue) *[]AnyValue {
+	if st.movedValues == nil {
+		return value
+	}
+	for {
+		replacement, ok := st.movedValues.anyValueSlices[value]
+		if !ok {
+			return value
+		}
+		value = replacement
 	}
 }
 
@@ -168,7 +255,7 @@ func (st *State) Unref() bool {
 		return false
 	case refs == 0:
 		st.clearCallbacks()
-		st.movedLogRecords = nil
+		st.movedValues = nil
 		return true
 	default:
 		panic("Cannot unref freed data")

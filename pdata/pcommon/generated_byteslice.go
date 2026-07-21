@@ -21,7 +21,12 @@ import (
 type ByteSlice internal.ByteSliceWrapper
 
 func (ms ByteSlice) getOrig() *[]byte {
-	return internal.GetByteSliceOrig(internal.ByteSliceWrapper(ms))
+	orig := internal.GetByteSliceOrig(internal.ByteSliceWrapper(ms))
+	state := ms.getState()
+	if state == nil {
+		return orig
+	}
+	return state.ResolveByteSlice(orig)
 }
 
 func (ms ByteSlice) getState() *internal.State {

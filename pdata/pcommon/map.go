@@ -24,7 +24,12 @@ func NewMap() Map {
 }
 
 func (m Map) getOrig() *[]internal.KeyValue {
-	return internal.GetMapOrig(internal.MapWrapper(m))
+	orig := internal.GetMapOrig(internal.MapWrapper(m))
+	state := m.getState()
+	if state == nil {
+		return orig
+	}
+	return state.ResolveKeyValueSlice(orig)
 }
 
 func (m Map) getState() *internal.State {
