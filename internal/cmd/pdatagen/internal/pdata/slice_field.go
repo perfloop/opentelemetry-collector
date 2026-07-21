@@ -84,7 +84,7 @@ func (sf *SliceField) templateFields(ms *messageStruct) map[string]any {
 			return ""
 		}(),
 		"returnType":        sf.returnSlice.getName(),
-		"origAccessor":      origAccessor(ms.getHasWrapper()),
+		"origAccessor":      ms.origAccessor(ms.getHasWrapper()),
 		"stateAccessor":     stateAccessor(ms.getHasWrapper()),
 		"elementHasWrapper": sf.returnSlice.getHasWrapper(),
 		"elementNullable":   sf.returnSlice.getElementNullable(),

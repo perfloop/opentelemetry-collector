@@ -88,7 +88,7 @@ func (pf *PrimitiveField) templateFields(ms *messageStruct) map[string]any {
 		"lowerFieldName":   strings.ToLower(pf.fieldName),
 		"testValue":        prf.TestValue(),
 		"returnType":       prf.GoType(),
-		"origAccessor":     origAccessor(ms.getHasWrapper()),
+		"origAccessor":     ms.origAccessor(ms.getHasWrapper()),
 		"stateAccessor":    stateAccessor(ms.getHasWrapper()),
 		"originStructName": ms.protoName,
 		"originFieldName":  pf.fieldName,

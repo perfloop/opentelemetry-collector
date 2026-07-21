@@ -105,6 +105,8 @@ func (es LogRecordSlice) AppendEmpty() LogRecord {
 // MoveAndAppendTo moves all elements from the current slice and appends them to the dest.
 // The current slice will be cleared.
 func (es LogRecordSlice) MoveAndAppendTo(dest LogRecordSlice) {
+	es.state.AssertMutableWithoutCallbacks()
+	es.state.BeforeLogRecordSliceMove(es.orig)
 	es.state.AssertMutable()
 	dest.state.AssertMutable()
 	// If they point to the same data, they are the same, nothing to do.

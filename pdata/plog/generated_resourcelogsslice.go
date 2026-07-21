@@ -105,6 +105,8 @@ func (es ResourceLogsSlice) AppendEmpty() ResourceLogs {
 // MoveAndAppendTo moves all elements from the current slice and appends them to the dest.
 // The current slice will be cleared.
 func (es ResourceLogsSlice) MoveAndAppendTo(dest ResourceLogsSlice) {
+	es.state.AssertMutableWithoutCallbacks()
+	es.state.BeforeLogRecordMove()
 	es.state.AssertMutable()
 	dest.state.AssertMutable()
 	// If they point to the same data, they are the same, nothing to do.

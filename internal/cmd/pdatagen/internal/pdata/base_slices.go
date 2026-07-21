@@ -52,17 +52,35 @@ func (ss *messageSlice) generateInternal(packageInfo *PackageInfo) []byte {
 func (ss *messageSlice) templateFields(packageInfo *PackageInfo) map[string]any {
 	hasWrapper := usedByOtherDataTypes(ss.packageName)
 	return map[string]any{
-		"hasWrapper":        usedByOtherDataTypes(ss.packageName),
-		"structName":        ss.structName,
-		"elementName":       ss.element.getName(),
-		"elementOriginName": ss.getElementOriginName(),
-		"elementNullable":   ss.elementNullable,
-		"origAccessor":      origAccessor(hasWrapper),
-		"stateAccessor":     stateAccessor(hasWrapper),
-		"packageName":       packageInfo.name,
-		"imports":           packageInfo.imports,
-		"testImports":       packageInfo.testImports,
+		"hasWrapper":                     usedByOtherDataTypes(ss.packageName),
+		"usesDeferredLogRecordTransfers": ss.usesDeferredLogRecordTransfers(packageInfo.name),
+		"usesLogRecordSliceTransfer":     ss.isLogRecordSlice(packageInfo.name),
+		"structName":                     ss.structName,
+		"elementName":                    ss.element.getName(),
+		"elementOriginName":              ss.getElementOriginName(),
+		"elementNullable":                ss.elementNullable,
+		"origAccessor":                   origAccessor(hasWrapper),
+		"stateAccessor":                  stateAccessor(hasWrapper),
+		"packageName":                    packageInfo.name,
+		"imports":                        packageInfo.imports,
+		"testImports":                    packageInfo.testImports,
 	}
+}
+
+func (ss *messageSlice) usesDeferredLogRecordTransfers(packageName string) bool {
+	if packageName != "plog" {
+		return false
+	}
+	switch ss.element.structName {
+	case "ResourceLogs", "ScopeLogs", "LogRecord":
+		return true
+	default:
+		return false
+	}
+}
+
+func (ss *messageSlice) isLogRecordSlice(packageName string) bool {
+	return packageName == "plog" && ss.element.structName == "LogRecord"
 }
 
 func (ss *messageSlice) getOriginName() string {

@@ -84,7 +84,7 @@ func (mf *MessageField) templateFields(ms *messageStruct) map[string]any {
 			}
 			return ""
 		}(),
-		"origAccessor":  origAccessor(ms.getHasWrapper()),
+		"origAccessor":  ms.origAccessor(ms.getHasWrapper()),
 		"stateAccessor": stateAccessor(ms.getHasWrapper()),
 	}
 }

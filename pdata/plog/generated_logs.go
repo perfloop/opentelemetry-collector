@@ -35,6 +35,8 @@ func NewLogs() Logs {
 // MoveTo moves all properties from the current struct overriding the destination and
 // resetting the current instance to its zero value
 func (ms Logs) MoveTo(dest Logs) {
+	ms.getState().AssertMutableWithoutCallbacks()
+	ms.getState().BeforeLogRecordMove()
 	ms.getState().AssertMutable()
 	dest.getState().AssertMutable()
 	// If they point to the same data, they are the same, nothing to do.

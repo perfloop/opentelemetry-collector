@@ -51,7 +51,7 @@ func TestSplitLogs(t *testing.T) {
 	splitSize := 5
 	split := splitLogs(splitSize, ld)
 	assert.Equal(t, splitSize, split.LogRecordCount())
-	assert.Equal(t, cp, split)
+	assert.True(t, pref.EqualLogs(cp, split))
 	assert.Equal(t, 15, ld.LogRecordCount())
 	assert.Equal(t, "test-log-int-0-0", split.ResourceLogs().At(0).ScopeLogs().At(0).LogRecords().At(0).SeverityText())
 	assert.Equal(t, "test-log-int-0-4", split.ResourceLogs().At(0).ScopeLogs().At(0).LogRecords().At(4).SeverityText())

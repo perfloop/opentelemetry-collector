@@ -38,6 +38,8 @@ func NewResourceLogs() ResourceLogs {
 // MoveTo moves all properties from the current struct overriding the destination and
 // resetting the current instance to its zero value
 func (ms ResourceLogs) MoveTo(dest ResourceLogs) {
+	ms.state.AssertMutableWithoutCallbacks()
+	ms.state.BeforeLogRecordMove()
 	ms.state.AssertMutable()
 	dest.state.AssertMutable()
 	// If they point to the same data, they are the same, nothing to do.

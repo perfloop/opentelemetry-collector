@@ -110,6 +110,14 @@ func (es {{ .structName }}) AppendEmpty() {{ .elementName }} {
 // MoveAndAppendTo moves all elements from the current slice and appends them to the dest.
 // The current slice will be cleared.
 func (es {{ .structName }}) MoveAndAppendTo(dest {{ .structName }}) {
+	{{- if .usesDeferredLogRecordTransfers }}
+	es.{{ .stateAccessor }}.AssertMutableWithoutCallbacks()
+	{{- if .usesLogRecordSliceTransfer }}
+	es.{{ .stateAccessor }}.BeforeLogRecordSliceMove(es.{{ .origAccessor }})
+	{{- else }}
+	es.{{ .stateAccessor }}.BeforeLogRecordMove()
+	{{- end }}
+	{{- end }}
 	es.{{ .stateAccessor }}.AssertMutable()
 	dest.{{ .stateAccessor }}.AssertMutable()
 	// If they point to the same data, they are the same, nothing to do.
