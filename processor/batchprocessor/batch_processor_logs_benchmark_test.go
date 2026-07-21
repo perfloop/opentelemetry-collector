@@ -4,17 +4,12 @@
 package batchprocessor
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"go.opentelemetry.io/collector/component/componenttest"
-	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/pdata/plog"
-	"go.opentelemetry.io/collector/processor/batchprocessor/internal/metadata"
-	"go.opentelemetry.io/collector/processor/processortest"
 )
 
 const (
@@ -22,42 +17,23 @@ const (
 	benchmarkCappedLogPage    = 64
 )
 
-func BenchmarkBatchLogsMaxSize4096(b *testing.B) {
-	ctx := context.Background()
+func BenchmarkSplitLogsMaxSize4096(b *testing.B) {
 	b.ReportAllocs()
 
 	for iteration := 0; b.Loop(); iteration++ {
 		b.StopTimer()
-		sink := new(batchLogsBenchmarkSink)
-		logsProcessor, err := NewFactory().CreateLogs(ctx, processortest.NewNopSettings(metadata.Type), &Config{
-			SendBatchMaxSize: benchmarkCappedLogPage,
-		}, sink)
-		require.NoError(b, err)
-		require.NoError(b, logsProcessor.Start(ctx, componenttest.NewNopHost()))
 		logs := benchmarkCappedLogs(iteration)
+		pages := make([]plog.Logs, 0, benchmarkCappedLogRecords/benchmarkCappedLogPage)
 
 		b.StartTimer()
-		require.NoError(b, logsProcessor.ConsumeLogs(ctx, logs))
-		require.NoError(b, logsProcessor.Shutdown(ctx))
+		for remaining := benchmarkCappedLogRecords; remaining > 0; remaining -= benchmarkCappedLogPage {
+			pages = append(pages, splitLogs(benchmarkCappedLogPage, logs))
+		}
 		b.StopTimer()
 
-		require.Len(b, sink.logs, benchmarkCappedLogRecords/benchmarkCappedLogPage)
-		assertBenchmarkCappedLogs(b, sink.logs, iteration)
+		assertBenchmarkCappedLogs(b, pages, iteration)
 		b.StartTimer()
 	}
-}
-
-type batchLogsBenchmarkSink struct {
-	logs []plog.Logs
-}
-
-func (*batchLogsBenchmarkSink) Capabilities() consumer.Capabilities {
-	return consumer.Capabilities{}
-}
-
-func (s *batchLogsBenchmarkSink) ConsumeLogs(_ context.Context, logs plog.Logs) error {
-	s.logs = append(s.logs, logs)
-	return nil
 }
 
 func benchmarkCappedLogs(iteration int) plog.Logs {
