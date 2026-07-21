@@ -43,6 +43,7 @@ func BenchmarkBatchLogsMaxSize4096(b *testing.B) {
 
 		require.Len(b, sink.logs, benchmarkCappedLogRecords/benchmarkCappedLogPage)
 		assertBenchmarkCappedLogs(b, sink.logs, iteration)
+		b.StartTimer()
 	}
 }
 
