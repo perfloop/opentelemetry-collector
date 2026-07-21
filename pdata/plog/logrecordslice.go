@@ -13,7 +13,10 @@ func (es LogRecordSlice) MoveFirstNTo(count int, dest LogRecordSlice) {
 	if es.orig == dest.orig {
 		return
 	}
-	*dest.orig = append(*dest.orig, (*es.orig)[:count]...)
+	dest.EnsureCapacity(dest.Len() + count)
+	for i := 0; i < count; i++ {
+		es.At(i).MoveTo(dest.AppendEmpty())
+	}
 	// Release moved records while the source retains the suffix's backing array.
 	clear((*es.orig)[:count])
 	*es.orig = (*es.orig)[count:]
