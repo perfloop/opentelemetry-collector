@@ -23,10 +23,12 @@ import (
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/consumer/consumererror"
 	"go.opentelemetry.io/collector/consumer/consumertest"
+	"go.opentelemetry.io/collector/featuregate"
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/pdata/ptrace"
 	"go.opentelemetry.io/collector/pdata/testdata"
+	"go.opentelemetry.io/collector/pdata/xpdata/pref"
 	"go.opentelemetry.io/collector/processor/batchprocessor/internal/metadata"
 	"go.opentelemetry.io/collector/processor/batchprocessor/internal/metadatatest"
 	"go.opentelemetry.io/collector/processor/processortest"
@@ -964,6 +966,59 @@ func TestBatchLogProcessor_Shutdown(t *testing.T) {
 
 	require.Equal(t, requestCount*logsPerRequest, sink.LogRecordCount())
 	require.Len(t, sink.AllLogs(), 1)
+}
+
+func TestBatchLogProcessor_CappedPagesWithPooling(t *testing.T) {
+	previousPooling := pref.UseProtoPooling.IsEnabled()
+	require.NoError(t, featuregate.GlobalRegistry().Set(pref.UseProtoPooling.ID(), true))
+	t.Cleanup(func() {
+		require.NoError(t, featuregate.GlobalRegistry().Set(pref.UseProtoPooling.ID(), previousPooling))
+	})
+
+	const maxBatchSize = 3
+	ctx := context.Background()
+	sink := new(consumertest.LogsSink)
+	logsProcessor, err := NewFactory().CreateLogs(ctx, processortest.NewNopSettings(metadata.Type), &Config{
+		SendBatchMaxSize: maxBatchSize,
+		MetadataKeys:     []string{"tenant"},
+	}, sink)
+	require.NoError(t, err)
+	require.NoError(t, logsProcessor.Start(ctx, componenttest.NewNopHost()))
+
+	inputs := make([]plog.Logs, 0, 2)
+	expectedByTenant := make(map[string][]plog.Logs, 2)
+	for _, tenant := range []string{"a", "b"} {
+		label := "tenant-" + tenant
+		input := newSplitLogsFixture(label, 1, 1, 7)
+		expectedByTenant[tenant] = expectedSplitLogsPages(label, 1, 1, 7, maxBatchSize)
+		tenantCtx := client.NewContext(ctx, client.Info{
+			Metadata: client.NewMetadata(map[string][]string{"tenant": {tenant}}),
+		})
+		require.NoError(t, logsProcessor.ConsumeLogs(tenantCtx, input))
+		pref.UnrefLogs(input)
+		inputs = append(inputs, input)
+	}
+	require.NoError(t, logsProcessor.Shutdown(ctx))
+
+	actualByTenant := make(map[string][]plog.Logs, 2)
+	actual := sink.AllLogs()
+	contexts := sink.Contexts()
+	require.Len(t, contexts, len(actual))
+	for pageIndex, page := range actual {
+		tenants := client.FromContext(contexts[pageIndex]).Metadata.Get("tenant")
+		require.Len(t, tenants, 1)
+		actualByTenant[tenants[0]] = append(actualByTenant[tenants[0]], page)
+	}
+	for tenant, expected := range expectedByTenant {
+		actual := actualByTenant[tenant]
+		require.Len(t, actual, len(expected))
+		for pageIndex := range expected {
+			require.Truef(t, pref.EqualLogs(expected[pageIndex], actual[pageIndex]), "tenant %q page %d differs", tenant, pageIndex)
+		}
+	}
+	for _, input := range inputs {
+		require.Panics(t, func() { pref.UnrefLogs(input) })
+	}
 }
 
 func getTestLogSeverityText(requestNum, index int) string {

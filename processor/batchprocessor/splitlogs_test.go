@@ -4,12 +4,15 @@
 package batchprocessor
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.opentelemetry.io/collector/pdata/testdata"
+	"go.opentelemetry.io/collector/pdata/xpdata/pref"
 )
 
 func TestSplitLogs_noop(t *testing.T) {
@@ -157,4 +160,106 @@ func TestSplitLogsPreserveSchemaURLOnPartialSplit(t *testing.T) {
 	split := splitLogs(splitSize, td)
 	assert.Equal(t, resourceSchemaURL, split.ResourceLogs().At(0).SchemaUrl())
 	assert.Equal(t, scopeSchemaURL, split.ResourceLogs().At(0).ScopeLogs().At(0).SchemaUrl())
+}
+
+func TestSplitLogsCappedPages(t *testing.T) {
+	assertSplitLogsPages(t, "single-resource-single-scope", 1, 1, 7, 3)
+}
+
+func TestSplitLogsManyResourcesFallback(t *testing.T) {
+	assertSplitLogsPages(t, "many-resources", 3, 1, 4, 5)
+}
+
+func TestSplitLogsManyScopesFallback(t *testing.T) {
+	assertSplitLogsPages(t, "many-scopes", 1, 3, 4, 5)
+}
+
+func assertSplitLogsPages(t *testing.T, label string, resources, scopes, records, pageSize int) {
+	t.Helper()
+
+	source := newSplitLogsFixture(label, resources, scopes, records)
+	remaining := resources * scopes * records
+	actual := make([]plog.Logs, 0, (remaining+pageSize-1)/pageSize)
+	for remaining > pageSize {
+		actual = append(actual, splitLogs(pageSize, source))
+		remaining -= pageSize
+	}
+	actual = append(actual, source)
+
+	expected := expectedSplitLogsPages(label, resources, scopes, records, pageSize)
+	require.Len(t, actual, len(expected))
+	for pageIndex := range expected {
+		require.Truef(t, pref.EqualLogs(expected[pageIndex], actual[pageIndex]), "page %d differs", pageIndex)
+	}
+}
+
+func newSplitLogsFixture(label string, resources, scopes, records int) plog.Logs {
+	page := newSplitLogsPage()
+	for resourceIndex := range resources {
+		for scopeIndex := range scopes {
+			for recordIndex := range records {
+				page.append(label, resourceIndex, scopeIndex, recordIndex)
+			}
+		}
+	}
+	return page.logs
+}
+
+func expectedSplitLogsPages(label string, resources, scopes, records, pageSize int) []plog.Logs {
+	pages := make([]plog.Logs, 0, (resources*scopes*records+pageSize-1)/pageSize)
+	var page *splitLogsPage
+	pageRecords := pageSize
+	for resourceIndex := range resources {
+		for scopeIndex := range scopes {
+			for recordIndex := range records {
+				if pageRecords == pageSize {
+					page = newSplitLogsPage()
+					pages = append(pages, page.logs)
+					pageRecords = 0
+				}
+				page.append(label, resourceIndex, scopeIndex, recordIndex)
+				pageRecords++
+			}
+		}
+	}
+	return pages
+}
+
+type splitLogsPage struct {
+	logs          plog.Logs
+	resourceLogs  plog.ResourceLogs
+	scopeLogs     plog.ScopeLogs
+	resourceIndex int
+	scopeIndex    int
+}
+
+func newSplitLogsPage() *splitLogsPage {
+	return &splitLogsPage{
+		logs:          plog.NewLogs(),
+		resourceIndex: -1,
+		scopeIndex:    -1,
+	}
+}
+
+func (page *splitLogsPage) append(label string, resourceIndex, scopeIndex, recordIndex int) {
+	if page.resourceIndex != resourceIndex {
+		page.resourceLogs = page.logs.ResourceLogs().AppendEmpty()
+		page.resourceLogs.Resource().Attributes().PutStr("resource.name", fmt.Sprintf("%s-resource-%d", label, resourceIndex))
+		page.resourceLogs.Resource().Attributes().PutInt("resource.index", int64(resourceIndex))
+		page.resourceLogs.SetSchemaUrl(fmt.Sprintf("https://example.com/%s/resource/%d", label, resourceIndex))
+		page.resourceIndex = resourceIndex
+		page.scopeIndex = -1
+	}
+	if page.scopeIndex != scopeIndex {
+		page.scopeLogs = page.resourceLogs.ScopeLogs().AppendEmpty()
+		page.scopeLogs.Scope().SetName(fmt.Sprintf("%s-scope-%d", label, scopeIndex))
+		page.scopeLogs.Scope().SetVersion(fmt.Sprintf("v%d", scopeIndex))
+		page.scopeLogs.Scope().Attributes().PutStr("scope.name", fmt.Sprintf("%s-scope-%d", label, scopeIndex))
+		page.scopeLogs.SetSchemaUrl(fmt.Sprintf("https://example.com/%s/scope/%d", label, scopeIndex))
+		page.scopeIndex = scopeIndex
+	}
+	logRecord := page.scopeLogs.LogRecords().AppendEmpty()
+	logRecord.SetSeverityText(fmt.Sprintf("%s-resource-%d-scope-%d-record-%d", label, resourceIndex, scopeIndex, recordIndex))
+	logRecord.Body().SetStr(fmt.Sprintf("%s-body-%d", label, recordIndex))
+	logRecord.Attributes().PutInt("record.index", int64(recordIndex))
 }

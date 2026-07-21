@@ -1,0 +1,5 @@
+change_type: enhancement
+component: processor/batch
+note: Improve splitting of capped single-resource, single-scope log batches and add LogRecordSlice.MoveFirstNTo for bounded prefix transfer.
+issues: [1310]
+change_logs: [user, api]
