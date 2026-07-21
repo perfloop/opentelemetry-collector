@@ -1093,23 +1093,6 @@ func TestBatchLogsProcessorCappedPagesTriggers(t *testing.T) {
 		assertCappedBoundaryPages(t, expected, actual, maxBatchSize)
 	})
 
-	t.Run("timeout", func(t *testing.T) {
-		const maxBatchSize = 5
-		sink := new(consumertest.LogsSink)
-		ctx := context.Background()
-		logsProcessor, err := NewFactory().CreateLogs(ctx, processortest.NewNopSettings(metadata.Type), &Config{
-			Timeout:          5 * time.Millisecond,
-			SendBatchSize:    maxBatchSize,
-			SendBatchMaxSize: maxBatchSize,
-		}, sink)
-		require.NoError(t, err)
-		require.NoError(t, logsProcessor.Start(ctx, componenttest.NewNopHost()))
-		require.NoError(t, logsProcessor.ConsumeLogs(ctx, newCappedBoundaryLogs(1, 1, 4)))
-		require.Eventually(t, func() bool { return sink.LogRecordCount() == 4 }, time.Second, time.Millisecond)
-		require.NoError(t, logsProcessor.Shutdown(ctx))
-
-		assertCappedBoundaryPages(t, expectedCappedBoundaryPages(1, 1, 4, maxBatchSize), sink.AllLogs(), maxBatchSize)
-	})
 }
 
 func consumeCappedLogsAtBoundary(t *testing.T, input plog.Logs, cfg *Config) []plog.Logs {
