@@ -85,11 +85,11 @@ func assertBenchmarkCappedLogs(b *testing.B, pages []plog.Logs, iteration int) {
 	recordIndex := 0
 	for _, page := range pages {
 		resourceLogs := page.ResourceLogs()
-		require.Len(b, resourceLogs, 1)
+		require.Equal(b, 1, resourceLogs.Len())
 		scopeLogs := resourceLogs.At(0).ScopeLogs()
-		require.Len(b, scopeLogs, 1)
+		require.Equal(b, 1, scopeLogs.Len())
 		records := scopeLogs.At(0).LogRecords()
-		require.Len(b, records, benchmarkCappedLogPage)
+		require.Equal(b, benchmarkCappedLogPage, records.Len())
 		for index := range records.Len() {
 			require.Equal(b, benchmarkLogRecordText(iteration, recordIndex), records.At(index).SeverityText())
 			recordIndex++
