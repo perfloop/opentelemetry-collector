@@ -15,7 +15,7 @@ func splitLogs(size int, src plog.Logs) plog.Logs {
 	if src.ResourceLogs().Len() == 1 {
 		resourceLogs := src.ResourceLogs().At(0)
 		if resourceLogs.ScopeLogs().Len() == 1 {
-			return splitOneResourceOneScopeLogs(size, resourceLogs, resourceLogs.ScopeLogs().At(0))
+			return splitOneResourceOneScopeLogs(size, resourceLogs)
 		}
 	}
 	totalCopiedLogRecords := 0
@@ -72,7 +72,8 @@ func splitLogs(size int, src plog.Logs) plog.Logs {
 	return dest
 }
 
-func splitOneResourceOneScopeLogs(size int, resourceLogs plog.ResourceLogs, scopeLogs plog.ScopeLogs) plog.Logs {
+func splitOneResourceOneScopeLogs(size int, resourceLogs plog.ResourceLogs) plog.Logs {
+	scopeLogs := resourceLogs.ScopeLogs().At(0)
 	dest := plog.NewLogs()
 	destResourceLogs := dest.ResourceLogs().AppendEmpty()
 	resourceLogs.Resource().CopyTo(destResourceLogs.Resource())
