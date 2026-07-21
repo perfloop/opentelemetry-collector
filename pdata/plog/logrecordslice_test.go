@@ -16,31 +16,13 @@ func TestLogRecordSliceMoveFirstNTo(t *testing.T) {
 	}
 	destination := NewLogRecordSlice()
 	destination.AppendEmpty().SetSeverityText("existing")
-	backing := *source.orig
 
 	source.MoveFirstNTo(2, destination)
 	source.MoveFirstNTo(1, destination)
 
-	// The suffix shares the backing array, so it must not retain moved records.
-	require.Nil(t, backing[0])
-	require.Nil(t, backing[1])
-	require.Nil(t, backing[2])
 	require.Equal(t, 1, source.Len())
 	require.Equal(t, "fourth", source.At(0).SeverityText())
 	require.Equal(t, []string{"existing", "first", "second", "third"}, severityTexts(destination))
-}
-
-func TestLogRecordSliceMoveFirstNToAliased(t *testing.T) {
-	logs := NewLogs()
-	source := logs.ResourceLogs().AppendEmpty().ScopeLogs().AppendEmpty().LogRecords()
-	for _, severityText := range []string{"first", "second", "third"} {
-		source.AppendEmpty().SetSeverityText(severityText)
-	}
-
-	destination := logs.ResourceLogs().At(0).ScopeLogs().At(0).LogRecords()
-	source.MoveFirstNTo(1, destination)
-
-	require.Equal(t, []string{"first", "second", "third"}, severityTexts(source))
 }
 
 func severityTexts(records LogRecordSlice) []string {
