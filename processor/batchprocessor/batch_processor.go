@@ -431,6 +431,7 @@ type batchTraces struct {
 	nextConsumer consumer.Traces
 	traceData    ptrace.Traces
 	spanCount    int
+	cursor       traceCursor
 	sizer        ptrace.Sizer
 }
 
@@ -459,18 +460,25 @@ func (bt *batchTraces) export(ctx context.Context, td ptrace.Traces) error {
 }
 
 func (bt *batchTraces) split(sendBatchMaxSize int) (int, ptrace.Traces) {
-	var td ptrace.Traces
-	var sent int
-	if sendBatchMaxSize > 0 && bt.itemCount() > sendBatchMaxSize {
-		td = splitTraces(sendBatchMaxSize, bt.traceData)
-		bt.spanCount -= sendBatchMaxSize
-		sent = sendBatchMaxSize
-	} else {
-		td = bt.traceData
-		sent = bt.spanCount
-		bt.traceData = ptrace.NewTraces()
-		bt.spanCount = 0
+	if sendBatchMaxSize > 0 && (bt.cursor.active || bt.itemCount() > sendBatchMaxSize) {
+		sent := sendBatchMaxSize
+		if bt.spanCount < sent {
+			sent = bt.spanCount
+		}
+		bt.cursor.active = true
+		td := bt.cursor.split(sent, bt.traceData)
+		bt.spanCount -= sent
+		if bt.spanCount == 0 {
+			bt.traceData = ptrace.NewTraces()
+			bt.cursor = traceCursor{}
+		}
+		return sent, td
 	}
+
+	td := bt.traceData
+	sent := bt.spanCount
+	bt.traceData = ptrace.NewTraces()
+	bt.spanCount = 0
 	return sent, td
 }
 
