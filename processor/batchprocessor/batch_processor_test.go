@@ -162,78 +162,45 @@ func TestBatchProcessorSpansDeliveredEnforceBatchSize(t *testing.T) {
 	assert.Equal(t, (requestCount*spansPerRequest)%int(cfg.SendBatchMaxSize), sink.AllTraces()[len(sink.AllTraces())-1].SpanCount())
 }
 
-func TestTraceCursorSplit(t *testing.T) {
-	const pageSize = 2
-
-	src := ptrace.NewTraces()
-	resource0 := src.ResourceSpans().AppendEmpty()
-	resource0.Resource().Attributes().PutStr("service.name", "resource-0")
-	resource0.SetSchemaUrl("https://example.com/resource/0")
-	scope0 := resource0.ScopeSpans().AppendEmpty()
-	scope0.Scope().SetName("scope-0")
-	scope0.SetSchemaUrl("https://example.com/scope/0")
-	for _, name := range []string{"a", "b", "c"} {
-		scope0.Spans().AppendEmpty().SetName(name)
+func TestBatchTracesPreservesTrailingEmptyTraceHierarchy(t *testing.T) {
+	batch := newBatchTraces(nil)
+	resource := batch.traceData.ResourceSpans().AppendEmpty()
+	resource.Resource().Attributes().PutStr("service.name", "resource-active")
+	resource.SetSchemaUrl("https://example.com/resource-schema/active")
+	scope := resource.ScopeSpans().AppendEmpty()
+	scope.Scope().SetName("scope-active")
+	scope.SetSchemaUrl("https://example.com/scope-schema/active")
+	for spanIndex := range 4 {
+		scope.Spans().AppendEmpty().SetName(fmt.Sprintf("span-%d", spanIndex))
 	}
-	scope1 := resource0.ScopeSpans().AppendEmpty()
-	scope1.Scope().SetName("scope-1")
-	scope1.SetSchemaUrl("https://example.com/scope/1")
-	scope1.Spans().AppendEmpty().SetName("d")
+	trailingScope := resource.ScopeSpans().AppendEmpty()
+	trailingScope.Scope().SetName("scope-empty")
+	trailingScope.SetSchemaUrl("https://example.com/scope-schema/empty")
+	trailingResource := batch.traceData.ResourceSpans().AppendEmpty()
+	trailingResource.Resource().Attributes().PutStr("service.name", "resource-empty")
+	trailingResource.SetSchemaUrl("https://example.com/resource-schema/empty")
+	batch.spanCount = batch.traceData.SpanCount()
 
-	resource1 := src.ResourceSpans().AppendEmpty()
-	resource1.Resource().Attributes().PutStr("service.name", "resource-1")
-	resource1.SetSchemaUrl("https://example.com/resource/1")
-	scope2 := resource1.ScopeSpans().AppendEmpty()
-	scope2.Scope().SetName("scope-2")
-	scope2.SetSchemaUrl("https://example.com/scope/2")
-	for _, name := range []string{"e", "f"} {
-		scope2.Spans().AppendEmpty().SetName(name)
-	}
+	sent, firstPage := batch.split(3)
+	require.Equal(t, 3, sent)
+	require.Equal(t, sent, firstPage.SpanCount())
+	sent, lastPage := batch.split(3)
+	require.Equal(t, 1, sent)
+	require.Equal(t, sent, lastPage.SpanCount())
+	require.Zero(t, batch.itemCount())
 
-	cursor := traceCursor{}
-	remaining := src.SpanCount()
-	var got []string
-	for remaining > 0 {
-		size := pageSize
-		if remaining < size {
-			size = remaining
-		}
-		page := cursor.split(size, src)
-		require.Equal(t, size, page.SpanCount())
-		got = append(got, traceCursorLabels(page)...)
-		remaining -= size
-	}
-
-	require.Equal(t, []string{
-		"resource-0|https://example.com/resource/0|scope-0|https://example.com/scope/0|a",
-		"resource-0|https://example.com/resource/0|scope-0|https://example.com/scope/0|b",
-		"resource-0|https://example.com/resource/0|scope-0|https://example.com/scope/0|c",
-		"resource-0|https://example.com/resource/0|scope-1|https://example.com/scope/1|d",
-		"resource-1|https://example.com/resource/1|scope-2|https://example.com/scope/2|e",
-		"resource-1|https://example.com/resource/1|scope-2|https://example.com/scope/2|f",
-	}, got)
-}
-
-func traceCursorLabels(traceData ptrace.Traces) []string {
-	var labels []string
-	resources := traceData.ResourceSpans()
-	for resourceIndex := 0; resourceIndex < resources.Len(); resourceIndex++ {
-		resource := resources.At(resourceIndex)
-		resourceName, ok := resource.Resource().Attributes().Get("service.name")
-		if !ok {
-			panic("resource has no service.name")
-		}
-
-		scopes := resource.ScopeSpans()
-		for scopeIndex := 0; scopeIndex < scopes.Len(); scopeIndex++ {
-			scope := scopes.At(scopeIndex)
-			spans := scope.Spans()
-			for spanIndex := 0; spanIndex < spans.Len(); spanIndex++ {
-				labels = append(labels, resourceName.Str()+"|"+resource.SchemaUrl()+"|"+scope.Scope().Name()+"|"+scope.SchemaUrl()+"|"+spans.At(spanIndex).Name())
-			}
-		}
-	}
-	return labels
+	lastPageResources := lastPage.ResourceSpans()
+	require.Equal(t, 2, lastPageResources.Len())
+	lastPageScope := lastPageResources.At(0).ScopeSpans().At(1)
+	require.Equal(t, "scope-empty", lastPageScope.Scope().Name())
+	require.Equal(t, "https://example.com/scope-schema/empty", lastPageScope.SchemaUrl())
+	require.Zero(t, lastPageScope.Spans().Len())
+	lastPageResource := lastPageResources.At(1)
+	resourceName, ok := lastPageResource.Resource().Attributes().Get("service.name")
+	require.True(t, ok)
+	require.Equal(t, "resource-empty", resourceName.Str())
+	require.Equal(t, "https://example.com/resource-schema/empty", lastPageResource.SchemaUrl())
+	require.Zero(t, lastPageResource.ScopeSpans().Len())
 }
 
 func TestBatchProcessorSentBySize(t *testing.T) {

@@ -466,9 +466,10 @@ func (bt *batchTraces) split(sendBatchMaxSize int) (int, ptrace.Traces) {
 			sent = bt.spanCount
 		}
 		bt.cursor.active = true
-		td := bt.cursor.split(sent, bt.traceData)
+		td, destResource, hasDestResource := bt.cursor.split(sent, bt.traceData)
 		bt.spanCount -= sent
 		if bt.spanCount == 0 {
+			bt.cursor.moveRemainingEmpty(bt.traceData, td, destResource, hasDestResource)
 			bt.traceData = ptrace.NewTraces()
 			bt.cursor = traceCursor{}
 		}
@@ -499,7 +500,7 @@ type traceCursor struct {
 // split moves up to size spans from src into a new trace page and advances the
 // cursor. Whole resource and scope groups move directly when they fit in the
 // page; only a group that crosses a page boundary is moved span by span.
-func (tc *traceCursor) split(size int, src ptrace.Traces) ptrace.Traces {
+func (tc *traceCursor) split(size int, src ptrace.Traces) (ptrace.Traces, ptrace.ResourceSpans, bool) {
 	dest := ptrace.NewTraces()
 	resources := src.ResourceSpans()
 	moved := 0
@@ -508,23 +509,16 @@ func (tc *traceCursor) split(size int, src ptrace.Traces) ptrace.Traces {
 	hasDestResource := false
 
 	for moved < size {
+		// spanCount is incremented with every source span, so the cursor cannot
+		// exhaust resources while batchTraces requests a page.
 		if tc.resourceIndex >= resources.Len() {
-			panic("trace cursor exhausted before filling page")
+			return dest, destResource, hasDestResource
 		}
 
 		srcResource := resources.At(tc.resourceIndex)
-		scopes := srcResource.ScopeSpans()
-		if tc.scopeIndex >= scopes.Len() {
-			tc.resourceIndex++
-			tc.scopeIndex = 0
-			tc.spanIndex = 0
-			hasDestResource = false
-			continue
-		}
-
 		remaining := size - moved
 		if tc.scopeIndex == 0 && tc.spanIndex == 0 {
-			resourceCount := resourceSC(srcResource)
+			resourceCount := traceResourceSpanCount(srcResource)
 			if resourceCount <= remaining {
 				srcResource.MoveTo(dest.ResourceSpans().AppendEmpty())
 				moved += resourceCount
@@ -534,6 +528,15 @@ func (tc *traceCursor) split(size int, src ptrace.Traces) ptrace.Traces {
 				hasDestResource = false
 				continue
 			}
+		}
+
+		scopes := srcResource.ScopeSpans()
+		if tc.scopeIndex >= scopes.Len() {
+			tc.resourceIndex++
+			tc.scopeIndex = 0
+			tc.spanIndex = 0
+			hasDestResource = false
+			continue
 		}
 
 		if !hasDestResource {
@@ -573,7 +576,44 @@ func (tc *traceCursor) split(size int, src ptrace.Traces) ptrace.Traces {
 		}
 	}
 
-	return dest
+	return dest, destResource, hasDestResource
+}
+
+// moveRemainingEmpty appends hierarchy elements after the final span to the
+// final page. The batch only counts spans, but empty ResourceSpans and
+// ScopeSpans are still part of the input trace hierarchy.
+func (tc *traceCursor) moveRemainingEmpty(src, dest ptrace.Traces, destResource ptrace.ResourceSpans, hasDestResource bool) {
+	resources := src.ResourceSpans()
+	for tc.resourceIndex < resources.Len() {
+		srcResource := resources.At(tc.resourceIndex)
+		if !hasDestResource && tc.scopeIndex == 0 && tc.spanIndex == 0 {
+			srcResource.MoveTo(dest.ResourceSpans().AppendEmpty())
+			tc.resourceIndex++
+			tc.scopeIndex = 0
+			tc.spanIndex = 0
+			continue
+		}
+
+		scopes := srcResource.ScopeSpans()
+		if tc.scopeIndex >= scopes.Len() {
+			tc.resourceIndex++
+			tc.scopeIndex = 0
+			tc.spanIndex = 0
+			hasDestResource = false
+			continue
+		}
+
+		scopes.At(tc.scopeIndex).MoveTo(destResource.ScopeSpans().AppendEmpty())
+		tc.scopeIndex++
+	}
+}
+
+func traceResourceSpanCount(resource ptrace.ResourceSpans) (count int) {
+	scopes := resource.ScopeSpans()
+	for scopeIndex := 0; scopeIndex < scopes.Len(); scopeIndex++ {
+		count += scopes.At(scopeIndex).Spans().Len()
+	}
+	return count
 }
 
 type batchMetrics struct {
